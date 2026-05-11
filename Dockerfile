@@ -11,6 +11,10 @@ COPY environment.yml /tmp/environment.yml
 RUN micromamba install -y -n base -f /tmp/environment.yml && \
     micromamba clean --all --yes
 
+RUN micromamba run -n base python -c "from vina import Vina; print('Python vina OK')"
+RUN micromamba run -n base which vina || true
+RUN micromamba run -n base vina --help || true
+
 # Debug checks during build
 RUN micromamba run -n base python --version
 RUN micromamba run -n base which python
