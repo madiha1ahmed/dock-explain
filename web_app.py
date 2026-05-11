@@ -508,6 +508,10 @@ def outputs(job_folder, filename):
         as_attachment=True if filename.endswith(".zip") else False,
     )
 
+@app.route("/health")
+def health():
+    return {"status": "ok"}, 200
+
 
 if __name__ == "__main__":
     app.run(debug=True, threaded=True)
