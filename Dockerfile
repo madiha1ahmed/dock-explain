@@ -19,6 +19,10 @@ RUN micromamba run -n base python -c "import gunicorn; print('Gunicorn OK')"
 
 COPY . /app
 
+USER root
+RUN mkdir -p /app/data/results && chown -R mambauser:mambauser /app/data
+USER mambauser
+
 EXPOSE 8000
 
 CMD ["bash", "-lc", "micromamba run -n base gunicorn web_app:app --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 1 --timeout 1800"]
