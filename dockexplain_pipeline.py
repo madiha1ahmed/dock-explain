@@ -23,7 +23,7 @@ from pdbfixer import PDBFixer
 from openmm.app import PDBFile
 from vina import Vina
 from rdkit.Geometry import Point3D
-from validation_suite import run_all_checks, print_report, save_report
+#from validation_suite import run_all_checks, print_report, save_report
 
 # Import pocket prediction module
 try:
