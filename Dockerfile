@@ -5,7 +5,6 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1
 ENV PIP_NO_CACHE_DIR=1
 
-# System packages needed by common scientific Python libs + PyMOL/OpenBabel basics
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     git \
@@ -31,4 +30,4 @@ WORKDIR /app/python_scripts
 
 EXPOSE 8000
 
-CMD gunicorn web_app:app --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 4 --timeout 900
+CMD ["sh", "-c", "gunicorn web_app:app --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 4 --timeout 900"]
