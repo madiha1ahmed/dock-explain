@@ -9,6 +9,7 @@ dependencies:
   - python=3.10
   - pip
 
+  # Web server
   - flask
   - gunicorn
   - requests
@@ -17,11 +18,13 @@ dependencies:
   - tqdm
   - psutil
 
+  # Scientific stack
   - numpy
   - pandas
   - scipy
   - matplotlib
 
+  # Chemistry / docking
   - rdkit
   - openbabel
   - openmm
@@ -29,11 +32,17 @@ dependencies:
   - fpocket
   - autodock-vina
 
+  # Structure analysis
   - mdanalysis
   - prolif
   - gemmi
+
+  # Reporting
   - reportlab
   - pillow
+
+  # Optional visualization dependencies
+  - py3dmol
 
   - pip:
       - meeko==0.7.1
