@@ -1,33 +1,17 @@
-FROM python:3.10-slim
+FROM mambaorg/micromamba:1.5.10
 
 WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1
 ENV PIP_NO_CACHE_DIR=1
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    git \
-    wget \
-    curl \
-    ca-certificates \
-    libgl1 \
-    libglib2.0-0 \
-    libxrender1 \
-    libxext6 \
-    libsm6 \
-    openbabel \
-    && rm -rf /var/lib/apt/lists/*
+COPY environment.yml /tmp/environment.yml
 
-COPY requirements.txt /app/requirements.txt
-
-RUN python -m pip install --upgrade pip setuptools wheel
-RUN pip install -r /app/requirements.txt
+RUN micromamba install -y -n base -f /tmp/environment.yml && \
+    micromamba clean --all --yes
 
 COPY . /app
 
-WORKDIR /app
-
 EXPOSE 8000
 
-CMD ["sh", "-c", "gunicorn web_app:app --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 4 --timeout 900"]
+CMD ["bash", "-lc", "gunicorn web_app:app --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 1 --timeout 900"]
