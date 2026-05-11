@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DockExplain | Explainable Molecular Docking</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+
+<body>
+  <div class="bg-shape bg-shape-one"></div>
+  <div class="bg-shape bg-shape-two"></div>
+
+  <div class="shell">
+    <header class="hero">
+      <nav class="topbar">
+        <div class="brand">
+          <div class="brand-mark">DX</div>
+          <div>
+            <strong>DockExplain</strong>
+            <span>Gemma4Good Hackathon</span>
+          </div>
+        </div>
+
+        <a class="nav-pill" href="#workflow">Start Analysis</a>
+      </nav>
+
+      <section class="hero-main">
+        <div>
+          <p class="eyebrow">AI-powered docking interpretation</p>
+          <h1>Explain molecular docking results beautifully.</h1>
+          <p class="subtitle">
+            DockExplain transforms docking scores, binding-site residues,
+            ProLIF interactions, PyMOL visualizations, and literature context
+            into clear scientific explanations using Gemma.
+          </p>
+
+          <div class="hero-badges">
+            <span>Protein-ligand docking</span>
+            <span>Interaction fingerprints</span>
+            <span>Gemma explanation</span>
+            <span>PDF report</span>
+          </div>
+        </div>
+
+        <div class="hero-visual">
+          <div class="molecule-card">
+            <div class="mol-orbit orbit-one"></div>
+            <div class="mol-orbit orbit-two"></div>
+            <div class="mol-core"></div>
+          </div>
+
+          <div class="mini-stat stat-one">
+            <b>Binding insight</b>
+            <span>Residues + interactions</span>
+          </div>
+
+          <div class="mini-stat stat-two">
+            <b>Report ready</b>
+            <span>PDF + JSON + visual files</span>
+          </div>
+        </div>
+      </section>
+    </header>
+
+    <main id="workflow" class="workflow">
+      <section class="card">
+        <div class="step-head">
+          <span>01</span>
+          <div>
+            <h2>Protein structure</h2>
+            <p>Enter an RCSB PDB ID. DockExplain will fetch metadata and detect co-crystal ligands.</p>
+          </div>
+        </div>
+
+        <label for="pdbId">RCSB PDB ID</label>
+
+        <div class="inline-form">
+          <input id="pdbId" placeholder="Example: 4COX, 1M17, 6LU7" />
+          <button id="fetchPdb">Fetch Structure</button>
+        </div>
+
+        <div id="proteinMeta" class="info-box muted-box">
+          Enter a PDB ID to begin.
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="step-head">
+          <span>02</span>
+          <div>
+            <h2>Binding site</h2>
+            <p>Select the co-crystal ligand whose binding site should guide docking.</p>
+          </div>
+        </div>
+
+        <div id="ligandList" class="muted-box">
+          Detected ligands will appear here.
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="step-head">
+          <span>03</span>
+          <div>
+            <h2>Drug to analyse</h2>
+            <p>Use the selected ligand, or provide a drug name, PDB ligand code, or SMILES.</p>
+          </div>
+        </div>
+
+        <div class="check-row">
+          <input type="checkbox" id="useCrystal" />
+          <label for="useCrystal">Use selected co-crystal ligand directly</label>
+        </div>
+
+        <div class="or-line"><span>or provide a new molecule</span></div>
+
+        <label for="drugInput">Drug name, 3-letter PDB code, or SMILES</label>
+
+        <div class="inline-form">
+          <input id="drugInput" placeholder="Example: Erlotinib, AQ4, MF8, or SMILES" />
+          <button id="resolveDrug" class="secondary">Resolve</button>
+        </div>
+
+        <div id="drugResolved" class="info-box muted-box">
+          No drug resolved yet.
+        </div>
+      </section>
+
+      <section class="card run-card">
+        <div class="step-head">
+          <span>04</span>
+          <div>
+            <h2>Run DockExplain</h2>
+            <p>
+              The web demo uses optimized default settings:
+              exhaustiveness 8, Gemma model, literature enrichment, PyMOL visualization, and PDF report generation.
+            </p>
+          </div>
+        </div>
+
+        <button id="runBtn" class="run-button">
+          Run DockExplain
+        </button>
+      </section>
+
+      <section class="results-card">
+        <div class="results-top">
+          <div>
+            <p class="eyebrow">Live output</p>
+            <h2>DockExplain Results</h2>
+          </div>
+
+          <div class="status-wrap">
+            <span id="jobStatus" class="status">Idle</span>
+          </div>
+        </div>
+
+        <div id="summary" class="summary muted-box">
+          Your docking summary will appear here.
+        </div>
+
+        <div class="results-layout">
+          <div class="files-panel">
+            <div class="panel-title">
+              <h3>Generated files</h3>
+              <a id="zipDownload" class="zip-button hidden" href="#" target="_blank">
+                Download ZIP
+              </a>
+            </div>
+
+            <div id="files" class="files-list"></div>
+          </div>
+
+          <div class="log-panel">
+            <div class="panel-title">
+              <h3>Live terminal log</h3>
+              <button id="copyLog" class="tiny-button">Copy Log</button>
+            </div>
+
+            <pre id="log">Logs will stream here when DockExplain starts.</pre>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
