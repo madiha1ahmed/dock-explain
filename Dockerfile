@@ -5,28 +5,31 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1
 ENV PIP_NO_CACHE_DIR=1
 ENV MPLBACKEND=Agg
+ENV OLLAMA_HOST=127.0.0.1:11434
+ENV OLLAMA_MODELS=/app/ollama_models
 
 COPY environment.yml /tmp/environment.yml
 
 RUN micromamba install -y -n base -f /tmp/environment.yml && \
     micromamba clean --all --yes
 
-RUN micromamba run -n base python -c "from vina import Vina; print('Python vina OK')"
-RUN micromamba run -n base which vina || true
-RUN micromamba run -n base vina --help || true
+USER root
 
-# Debug checks during build
-RUN micromamba run -n base python --version
-RUN micromamba run -n base which python
-RUN micromamba run -n base python -c "import flask; print('Flask OK')"
-RUN micromamba run -n base python -c "import gunicorn; print('Gunicorn OK')"
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://ollama.com/install.sh | sh
 
 COPY . /app
 
-USER root
-RUN mkdir -p /app/data/results && chown -R mambauser:mambauser /app/data
+RUN mkdir -p /app/data/results /app/ollama_models && \
+    chown -R mambauser:mambauser /app/data /app/ollama_models /app && \
+    chmod +x /app/start.sh
+
 USER mambauser
 
 EXPOSE 8000
 
-CMD ["bash", "-lc", "micromamba run -n base gunicorn web_app:app --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 1 --timeout 1800"]
+CMD ["bash", "-lc", "/app/start.sh"]
