@@ -31,7 +31,9 @@ from flask import Flask, render_template, request, jsonify, send_from_directory
 # ═════════════════════════════════════════════════════════════
 
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = (BASE_DIR / "../data").resolve()
+
+# Koyeb-safe writable data folder
+DATA_DIR = Path(os.environ.get("DOCKEXPLAIN_DATA_DIR", BASE_DIR / "data")).resolve()
 RESULTS_DIR = DATA_DIR / "results"
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
