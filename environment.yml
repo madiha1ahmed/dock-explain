@@ -31,6 +31,7 @@ dependencies:
   - pdbfixer
   - fpocket
   - autodock-vina
+  - pymol-open-source
 
   # Structure analysis
   - mdanalysis
