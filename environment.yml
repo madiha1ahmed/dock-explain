@@ -9,30 +9,6 @@ dependencies:
   - python=3.10
   - pip
 
-  # Core scientific stack
-  - numpy
-  - pandas
-  - scipy
-  - matplotlib
-
-  # Chemistry / molecular modeling
-  - rdkit
-  - openbabel
-  - openmm
-  - pdbfixer
-  - fpocket
-  - autodock-vina
-
-  # Structure / analysis
-  - mdanalysis
-  - prolif
-  - gemmi
-
-  # PDF / rendering basics
-  - reportlab
-  - pillow
-
-  # Web server basics
   - flask
   - gunicorn
   - requests
@@ -40,6 +16,24 @@ dependencies:
   - lxml
   - tqdm
   - psutil
+
+  - numpy
+  - pandas
+  - scipy
+  - matplotlib
+
+  - rdkit
+  - openbabel
+  - openmm
+  - pdbfixer
+  - fpocket
+  - autodock-vina
+
+  - mdanalysis
+  - prolif
+  - gemmi
+  - reportlab
+  - pillow
 
   - pip:
       - meeko==0.7.1
