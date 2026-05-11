@@ -26,7 +26,7 @@ RUN pip install -r /app/requirements.txt
 
 COPY . /app
 
-WORKDIR /app/python_scripts
+WORKDIR /app
 
 EXPOSE 8000
 
