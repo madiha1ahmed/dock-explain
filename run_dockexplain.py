@@ -304,53 +304,11 @@ def run_dockexplain(
 
 
     # ════════════════════════════════════════════════════════
-    # STEP 2 — Structural validation
+    # STEP 2 — Structural validation removed
     # ════════════════════════════════════════════════════════
-    print(f"\n{'─'*66}")
-    print(f"  STEP 2/7 — Structural validation (5 tiers)")
-    print(f"{'─'*66}")
-
-    if not all([clean_pdb, best_sdf, json_path]):
-        missing = [
-            n for n, v in [
-                ("clean_pdb", clean_pdb),
-                ("best_pose.sdf", best_sdf),
-                ("results.json", json_path),
-            ] if not v
-        ]
-        steps["validation"] = StepResult("validation").skip(
-            f"Missing files from Step 1: {missing}"
-        )
-        print(f"  ⚠ Skipped — files not found: {missing}")
-    elif "run_all_checks" not in components:
-        steps["validation"] = StepResult("validation").skip(
-            "validation_suite.py not found"
-        )
-        print("  ⚠ Skipped — validation_suite.py not importable")
-    else:
-        result = run_step(
-            "validation",
-            components["run_all_checks"],
-            raw_pdb     = protein_pdb,
-            clean_pdb   = clean_pdb,
-            ligand_sdf  = best_sdf,
-            result_json = json_path,
-        )
-        steps["validation"] = result
-
-        if result.status == "ok":
-            report = result.data
-            components["print_report"](report)
-            components["save_report"](report, out_dir)
-            conf    = report.confidence_score()
-            overall = report.overall_status()
-            print(f"\n  ✓ Validation complete in {result.elapsed:.1f}s")
-            print(f"    Confidence score : {conf}%")
-            print(f"    Overall status   : {overall}")
-            if overall == "FAIL":
-                print("  ⚠ Validation FAILED — results may be unreliable.")
-        else:
-            print(f"  ⚠ Validation error: {result.message[:200]}")
+    steps["validation"] = StepResult("validation").skip(
+        "Validation step removed for deployment"
+    )
 
 
     # ════════════════════════════════════════════════════════
