@@ -853,6 +853,103 @@ def is_novel_compound(drug_name: str, cid: int | None = None) -> bool:
     return False
 
 # ════════════════════════════════════════════════════════════════════════════
+# DDG SNIPPET NAME EXTRACTOR
+# Tries to pull a clean drug name out of web search snippet text.
+# Used when structured lookups (PubChem/RCSB) can't resolve a vendor ID.
+# ════════════════════════════════════════════════════════════════════════════
+
+import re as _snippet_re
+
+# Patterns that signal the real name is nearby:
+#   "orb1691391" is Remdesivir …
+#   Remdesivir nucleoside monophosphate [orb1691391]
+#   CAS Number … Remdesivir Impurity 18 ; Molecular Formula …
+_SYNONYM_PATTERNS = [
+    # "[real name] [raw_id]"  or  "[real name] (raw_id)"
+    _snippet_re.compile(
+        r"([A-Z][A-Za-z0-9 \-]{3,50})\s*[\[\(]%(RAW)s[\]\)]",
+    ),
+    # "raw_id is a … known as Real Name"
+    _snippet_re.compile(
+        r"%(RAW)s\s+is\s+(?:a\s+)?(?:[A-Za-z ]{1,40}\s+)?(?:known as|called|named)\s+"
+        r"([A-Z][A-Za-z0-9 \-]{3,50})",
+        _snippet_re.IGNORECASE,
+    ),
+]
+
+def _extract_drug_name_from_snippets(
+    snippets: list,          # list[SearchResult]
+    raw_drug: str,
+) -> str:
+    """
+    Scan DDG snippet text for a drug name associated with raw_drug.
+
+    Strategy (in priority order):
+      1. Pattern match: "[Name] [raw_id]" or "raw_id is … Name"
+      2. Title heuristic: if a snippet title contains a known INN stem
+         and doesn't look like a generic webpage title, use it.
+      3. Return "" (no confident match).
+
+    Returns the best candidate name, or "" if nothing confident found.
+    """
+    raw_lower  = raw_drug.lower().strip()
+    candidates = []
+
+    # ── 1. Regex patterns in snippet body ────────────────────────────────
+    for s in snippets:
+        text = (s.title or "") + " " + (s.snippet or "")
+        # Pattern A: "Real Name [orb1691391]"
+        m = _snippet_re.search(
+            r"([A-Z][A-Za-z0-9 \-]{3,50})\s*[\[\(]" + _snippet_re.escape(raw_drug) + r"[\]\)]",
+            text,
+        )
+        if m:
+            candidates.append((m.group(1).strip(), 10))   # high confidence
+            continue
+
+        # Pattern B: raw ID mentioned, followed by INN-looking word nearby
+        idx = text.lower().find(raw_lower)
+        if idx != -1:
+            window = text[max(0, idx - 60): idx + 120]
+            # Look for a capitalised phrase that ends in an INN stem
+            m2 = _snippet_re.search(
+                r"([A-Z][a-z]+(?:[ \-][A-Z]?[a-z]+){0,5})"
+                r"(?:inib|mab|vir|lukast|navir|pril|mycin|cillin|"
+                r"cycline|floxacin|azole|statin|sartan|dipine|olol)",
+                window,
+            )
+            if m2:
+                candidates.append((m2.group(0).strip(), 20))
+
+    # ── 2. Title heuristic ───────────────────────────────────────────────
+    for s in snippets:
+        title = (s.title or "").strip()
+        # Titles like "GS-441524 monophosphate | C12H14N5O7P | CID …"
+        # → take the part before the first "|" or "–"
+        short = _snippet_re.split(r"[\|–—]", title)[0].strip()
+        if (
+            3 < len(short) < 60
+            and not short.lower().startswith(("http", "www"))
+            and raw_lower not in short.lower()      # not just repeating the raw ID
+            and _snippet_re.search(r"[A-Za-z]{4}", short)  # has real letters
+        ):
+            candidates.append((short, 30))   # lower confidence than pattern match
+
+    if not candidates:
+        return ""
+
+    # Pick the highest-confidence (lowest score) candidate
+    best_name, _ = min(candidates, key=lambda x: x[1])
+
+    # Sanity: must be shorter than the raw vendor ID to be a simplification
+    # (a name that's longer than "orb1691391" is probably noise)
+    if len(best_name) >= len(raw_drug) + 30:
+        return ""
+
+    return best_name
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # MAIN ENRICHMENT FUNCTION
 # ════════════════════════════════════════════════════════════════════════════
 
@@ -912,6 +1009,67 @@ def enrich_docking_context(
     )
     if ctx.drug_display_name != drug:
         log(f"  → Searches will use: '{ctx.drug_display_name}'")
+
+    # ── 0b. DDG identity fallback ─────────────────────────────────────────
+    # When structured lookups (SMILES→CID, PDB code→CID, RCSB CCD) all fail
+    # or still leave the display name as the raw vendor ID / obscure code,
+    # search DDG directly for the drug name AND the PDB ligand code.
+    # A simple web search immediately surfaces synonyms — e.g. searching
+    # "orb1691391" returns "Remdesivir nucleoside monophosphate" from Biorbyt,
+    # and "F86 PDB ligand" returns the RCSB entry for Remdesivir monophosphate.
+    # The snippets are prepended to drug_summary so Gemma can read the identity
+    # even when no CID or INN substitution was possible.
+    _display_still_raw = (ctx.drug_display_name.lower() == drug.lower())
+    if _DDGS_AVAILABLE and (_display_still_raw or cocrystal_code):
+        _id_snippets: list[SearchResult] = []
+
+        # Search 1: the raw drug name / vendor catalog ID
+        if _display_still_raw:
+            _q1 = f'"{drug}" drug compound chemical synonym'
+            log(f"DDG identity: {_q1[:70]}...")
+            _r1 = _ddg_search(_q1, max_results=4)
+            if not _r1:
+                # Retry without quotes — some IDs don't match with exact search
+                _r1 = _ddg_search(f"{drug} drug compound", max_results=4)
+            if _r1:
+                _id_snippets += _r1
+                log(f"  ✓ {len(_r1)} identity results for '{drug}'")
+            time.sleep(delay_between)
+
+        # Search 2: the PDB 3-letter ligand code, which often resolves faster
+        if cocrystal_code:
+            _q2 = f"{cocrystal_code} PDB ligand chemical name drug"
+            log(f"DDG identity: {_q2[:70]}...")
+            _r2 = _ddg_search(_q2, max_results=3)
+            if _r2:
+                _id_snippets += _r2
+                log(f"  ✓ {len(_r2)} identity results for PDB code '{cocrystal_code}'")
+            time.sleep(delay_between)
+
+        if _id_snippets:
+            identity_block = "\n".join(
+                f"[{s.title}] {s.snippet}" for s in _id_snippets
+            )
+            ctx.drug_summary = (
+                f"DRUG IDENTITY (web search for '{drug}'"
+                + (f" / PDB code {cocrystal_code}" if cocrystal_code else "")
+                + "):\n"
+                + identity_block
+                + ("\n\n" + ctx.drug_summary if ctx.drug_summary else "")
+            ).strip()
+            ctx.web_sources += _id_snippets
+            ctx.sources     += [s.url for s in _id_snippets]
+
+            # Attempt to extract a better display name from the snippets.
+            # Look for patterns like "Remdesivir" in the snippet text and
+            # use it to replace the raw vendor ID in downstream searches.
+            if _display_still_raw:
+                _candidate = _extract_drug_name_from_snippets(
+                    _id_snippets, drug
+                )
+                if _candidate:
+                    log(f"  ✓ DDG resolved display name: '{drug}' → '{_candidate}'")
+                    ctx.drug_display_name = _candidate
 
     # ── 1. Resolve protein name via RCSB + PDB COMPND ────────────────────
     # KEY FIX: Now passes pdb_path so full COMPND is extracted
