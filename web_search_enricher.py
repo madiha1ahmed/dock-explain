@@ -696,6 +696,39 @@ def _best_synonym_from_cid(cid: int, verbose: bool, current_name: str) -> str:
     return current_name
 
 
+def _rcsb_chemcomp_name(pdb_code: str) -> str:
+    """
+    Query RCSB Chemical Component Dictionary for the chemical name of a
+    PDB ligand 3-letter code.  e.g. "F86" → "REMDESIVIR MONOPHOSPHATE".
+
+    This handles the common case where the pipeline stores a vendor catalog
+    number (e.g. "orb1691391") as the drug name while the CCD maps the
+    PDB code (e.g. "F86") to the authoritative chemical / INN name.
+
+    Returns "" on failure or unrecognised code.
+    """
+    if not _REQUESTS_AVAILABLE or not pdb_code:
+        return ""
+    pdb_code = pdb_code.strip().upper()
+    try:
+        r = requests.get(
+            f"https://data.rcsb.org/rest/v1/core/chemcomp/{pdb_code}",
+            timeout=8,
+        )
+        if r.status_code != 200:
+            return ""
+        chem = r.json().get("chem_comp", {})
+        # pdbx_synonyms often holds the INN (e.g. "REMDESIVIR MONOPHOSPHATE");
+        # fall back to the full IUPAC name field.
+        for field in ("pdbx_synonyms", "name"):
+            val = chem.get(field, "").strip()
+            if val and val not in ("?", "", "none", "None"):
+                return val.split(";")[0].strip()
+    except Exception:
+        pass
+    return ""
+
+
 def _resolve_drug_display_name(
     drug: str, drug_smiles: str, cocrystal_code: str,
     result_json: dict, verbose: bool
@@ -738,6 +771,28 @@ def _resolve_drug_display_name(
         cid = _pubchem_cid_from_name(cocrystal_code)
         if cid and verbose:
             print(f"  [web_search] Drug CID from PDB code '{cocrystal_code}': {cid}")
+
+    # ── 2b. RCSB CCD lookup (PDB ligand code → chemical name → PubChem) ──
+    # Handles the case where the drug is stored as a vendor catalog number
+    # (e.g. "orb1691391") but the co-crystal PDB ligand code (e.g. "F86")
+    # is known.  RCSB CCD authoritatively maps ligand codes to chemical /
+    # INN names (e.g. F86 → "REMDESIVIR MONOPHOSPHATE").
+    if not cid and cocrystal_code:
+        chemcomp_name = _rcsb_chemcomp_name(cocrystal_code)
+        if chemcomp_name:
+            if verbose:
+                print(f"  [web_search] RCSB CCD: '{cocrystal_code}' → '{chemcomp_name}'")
+            cid = _pubchem_cid_from_name(chemcomp_name)
+            if cid and verbose:
+                print(f"  [web_search] Drug CID via RCSB CCD name '{chemcomp_name}': {cid}")
+            # Even if PubChem doesn't have a CID for the exact string,
+            # the CCD name is still far better than a vendor catalog number —
+            # return it directly so Gemma sees "REMDESIVIR MONOPHOSPHATE"
+            # rather than "orb1691391".
+            if not cid:
+                if verbose:
+                    print(f"  [web_search]   ✓ Using RCSB CCD name directly: '{chemcomp_name}'")
+                return chemcomp_name
 
     # ── 3. Drug name lookup ───────────────────────────────────────────────
     if not cid:
