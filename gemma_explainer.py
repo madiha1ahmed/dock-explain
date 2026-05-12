@@ -650,7 +650,28 @@ def explain_docking_result(
     if lit_ctx is None and run_web_search:
         if verbose:
             print(f"\n  [Step 1/2] Running web search enrichment...")
-        lit_ctx = enrich_docking_context(drug, protein, verbose=verbose)
+        # Pass SMILES, full result dict, and PDB ID so the drug name resolver
+        # can use the most reliable paths: SMILES → PubChem CID → synonym, and
+        # RCSB CCD lookup for PDB 3-letter ligand codes (e.g. F86 → Remdesivir).
+        # Without these, vendor catalog IDs like "orb1691391" can't be resolved.
+        _drug_smiles = (
+            result.get("smiles", "")
+            or result.get("drug_smiles", "")
+            or result.get("ligand_smiles", "")
+        )
+        _pdb_id = (
+            result.get("pdb_id", "")
+            or result.get("pdb", "")
+            or result.get("structure_id", "")
+        )
+        lit_ctx = enrich_docking_context(
+            drug        = drug,
+            protein     = protein,
+            drug_smiles = _drug_smiles,
+            result_json = result,
+            pdb_id      = _pdb_id,
+            verbose     = verbose,
+        )
 
     # ── Step 2: Build prompt ─────────────────────────────────────────────
     prompt = build_prompt(result, lit_ctx)
