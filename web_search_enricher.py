@@ -361,6 +361,60 @@ def _pubmed_fetch(pmids: list[str]) -> list[Paper]:
     return papers
 
 
+# PDB classification tags that are too generic to search on.
+# When gene_symbol resolution returns one of these, we extract a better
+# term from the RCSB struct title (e.g. "VIRAL PROTEIN" → "COVID-19 main protease").
+_GENERIC_PDB_CLASSIFICATIONS = frozenset({
+    "viral protein", "hydrolase", "transferase", "lyase", "isomerase",
+    "ligase", "oxidoreductase", "signaling protein", "immune system",
+    "transport protein", "structural protein", "motor protein",
+    "viral protein/rna", "dna", "rna", "virus", "toxin",
+    "protein fibril", "blood clotting", "apoptosis", "cell cycle",
+    "chaperone", "cytokine", "hormone", "membrane protein",
+    "transcription", "translation", "unknown function",
+    "sugar binding protein", "metal binding protein",
+})
+
+
+def _extract_protein_search_term(rcsb_title: str) -> str:
+    """
+    Extract a focused, searchable protein name from an RCSB struct title.
+
+    Examples:
+      "The crystal structure of COVID-19 main protease in complex with N3"
+        → "COVID-19 main protease"
+      "SARS-CoV-2 RdRp in complex with Remdesivir monophosphate"
+        → "SARS-CoV-2 RdRp"
+      "Crystal structure of human EGFR kinase domain"
+        → "human EGFR kinase domain"
+
+    Returns "" if nothing meaningful can be extracted.
+    """
+    import re
+    t = rcsb_title.strip()
+
+    # Strip leading boilerplate: "The crystal/cryo-EM/X-ray structure of"
+    t = re.sub(
+        r"^(the\s+)?(cryo-?em\s+)?((crystal|cryo|x-?ray)\s+)?"
+        r"(structure|structures)\s+(of\s+)?",
+        "", t, flags=re.IGNORECASE,
+    ).strip()
+
+    # Cut at "in complex with …", "bound to …", "complexed with …",
+    # "with inhibitor/ligand/substrate/cofactor", ": crystal structure"
+    t = re.split(
+        r"\s+(?:in\s+complex\s+with|bound\s+to|complexed\s+with"
+        r"|with\s+(?:an?\s+)?(?:inhibitor|ligand|substrate|cofactor|compound)"
+        r"|:\s*crystal)",
+        t, flags=re.IGNORECASE, maxsplit=1,
+    )[0].strip()
+
+    # Strip trailing noise: prepositions, articles, sequence codes
+    t = re.sub(r"\s+(at|by|via|from|the|a|an)\s*$", "", t, flags=re.IGNORECASE).strip()
+
+    return t if len(t) > 4 else ""
+
+
 def gather_pubmed_literature(
     drug        : str,
     protein     : str,
@@ -368,6 +422,7 @@ def gather_pubmed_literature(
     interactions: list[dict],
     n_papers    : int = 8,
     verbose     : bool = True,
+    protein_display_name: str = "",   # RCSB struct title — used when gene_symbol is generic
 ) -> list[Paper]:
     """
     Build targeted PubMed queries from drug + protein + key residues
@@ -382,9 +437,21 @@ def gather_pubmed_literature(
         if verbose:
             print(f"  [pubmed] {msg}")
 
-    # Use gene symbol for searching if available (much more precise than
-    # the raw PDB COMPND string like "TRANSFERASE")
-    search_protein = gene_symbol if gene_symbol else protein
+    # Use gene symbol for searching if available and meaningful.
+    # If gene_symbol is a generic PDB classification tag ("VIRAL PROTEIN",
+    # "HYDROLASE", etc.), extract a better term from the RCSB struct title.
+    # This is the primary fix for queries like "VIRAL PROTEIN binding site
+    # crystal structure small molecule" returning garbage papers.
+    _generic = gene_symbol.lower().strip() in _GENERIC_PDB_CLASSIFICATIONS
+    if _generic and protein_display_name:
+        _extracted = _extract_protein_search_term(protein_display_name)
+        if _extracted:
+            log(f"Generic protein tag '{gene_symbol}' → using '{_extracted}' for PubMed")
+            search_protein = _extracted
+        else:
+            search_protein = protein_display_name[:80]  # use full title truncated
+    else:
+        search_protein = gene_symbol if gene_symbol else protein
 
     # Key H-bond residues from ProLIF output
     hbond_res = [
@@ -1178,22 +1245,24 @@ def enrich_docking_context(
     if _is_novel:
         log(f"PubMed: protein-only search (novel drug — skipping drug name)...")
         ctx.papers = gather_pubmed_literature(
-            drug         = "",
-            protein      = protein,
-            gene_symbol  = search_name,
-            interactions = interactions,
-            n_papers     = n_papers,
-            verbose      = verbose,
+            drug                 = "",
+            protein              = protein,
+            gene_symbol          = search_name,
+            interactions         = interactions,
+            n_papers             = n_papers,
+            verbose              = verbose,
+            protein_display_name = display_name,
         )
     else:
         log(f"PubMed: searching for {ctx.drug_display_name[:30]} + {search_name}...")
         ctx.papers = gather_pubmed_literature(
-            drug         = ctx.drug_display_name,
-            protein      = protein,
-            gene_symbol  = search_name,
-            interactions = interactions,
-            n_papers     = n_papers,
-            verbose      = verbose,
+            drug                 = ctx.drug_display_name,
+            protein              = protein,
+            gene_symbol          = search_name,
+            interactions         = interactions,
+            n_papers             = n_papers,
+            verbose              = verbose,
+            protein_display_name = display_name,
         )
 
     if ctx.papers:
@@ -1213,8 +1282,24 @@ def enrich_docking_context(
     if _DDGS_AVAILABLE:
         import re as _re
 
+        # Build the best protein search term for DDG (same logic as PubMed).
+        _ddg_protein = search_name
+        if search_name.lower().strip() in _GENERIC_PDB_CLASSIFICATIONS and display_name:
+            _ddg_protein = (
+                _extract_protein_search_term(display_name) or display_name[:80]
+            )
+            log(f"DDG protein term: '{search_name}' → '{_ddg_protein}'")
+
         if not _is_novel:
-            _drug_queries = [f"{ctx.drug_display_name} mechanism of action pharmacology"]
+            # Run multiple targeted drug queries — the old single query
+            # ("mechanism of action pharmacology") missed biological activity,
+            # isozyme specificity, and structural chemistry context.
+            _drug_queries = [
+                f"{ctx.drug_display_name} mechanism of action pharmacology",
+                f"{ctx.drug_display_name} biological activity inhibitor enzyme",
+                f"{ctx.drug_display_name} chemical properties synthesis",
+            ]
+            # Also try stripped prefix version for research codes like "AZD-1234"
             _stripped = _re.sub(r"^[A-Z]{2,6}[-_]", "", drug)
             if _stripped != drug:
                 _drug_queries.append(f"{_stripped} compound pharmacology")
@@ -1238,9 +1323,9 @@ def enrich_docking_context(
         else:
             log(f"DDG drug search: skipped (novel compound — no web presence)")
 
-        # 6b. Protein biology
-        log(f"DDG: {search_name} protein biology...")
-        _r = _ddg_search(f"{search_name} protein function structure disease", max_results=4)
+        # 6b. Protein biology — use the resolved name, not the generic tag
+        log(f"DDG: {_ddg_protein} protein biology...")
+        _r = _ddg_search(f"{_ddg_protein} protein function structure disease", max_results=4)
         if _r:
             snippets = "\n".join(f"[{s.title}] {s.snippet}" for s in _r)
             ctx.protein_summary = (ctx.protein_summary + "\n\nWeb snippets:\n" + snippets).strip()
@@ -1249,11 +1334,11 @@ def enrich_docking_context(
             log(f"  ✓ {len(_r)} results")
         time.sleep(delay_between)
 
-        # 6c. Drug–protein interaction
+        # 6c. Drug–protein interaction — use resolved protein name
         if not _is_novel:
-            log(f"DDG: {ctx.drug_display_name} {search_name} binding...")
+            log(f"DDG: {ctx.drug_display_name} {_ddg_protein} binding...")
             _r = _ddg_search(
-                f"{ctx.drug_display_name} {search_name} binding docking interaction",
+                f"{ctx.drug_display_name} {_ddg_protein} binding docking interaction",
                 max_results=5
             )
             if _r:
