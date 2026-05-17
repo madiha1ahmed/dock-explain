@@ -62,24 +62,21 @@ The total pipeline runtime for a typical run is **8–10 minutes** (dominated by
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        DockExplain Pipeline                      │
+│                        DockExplain Pipeline                     │
 ├────────┬────────────────────────────────────────────────────────┤
 │ Step 1 │ Docking + ProLIF fingerprint                           │
 │        │ AutoDock Vina → 10 poses → best SDF → interaction CSV  │
 ├────────┼────────────────────────────────────────────────────────┤
-│ Step 2 │ 5-Tier Structural Validation                           │
-│        │ Integrity · Chemistry · Binding site · Pose · Biology  │
-├────────┼────────────────────────────────────────────────────────┤
-│ Step 3 │ PyMOL Visualization                                    │
+│ Step 2 │ PyMOL Visualization                                    │
 │        │ Colour-coded PNG + interactive .pse session            │
 ├────────┼────────────────────────────────────────────────────────┤
-│ Step 4 │ Literature Enrichment                                  │
+│ Step 3 │ Literature Enrichment                                  │
 │        │ PubChem · ChEMBL · UniProt · PubMed · DuckDuckGo       │
 ├────────┼────────────────────────────────────────────────────────┤
-│ Step 5 │ Gemma 4 Explanation                                    │
+│ Step 4 │ Gemma 4 Explanation                                    │
 │        │ 7-section plain-language analysis grounded in sources  │
 ├────────┼────────────────────────────────────────────────────────┤
-│ Step 6 │ PDF Report                                             │
+│ Step 5 │ PDF Report                                             │
 │        │ ReportLab — interactions · validation · AI analysis    │
 └────────┴────────────────────────────────────────────────────────┘
 ```
@@ -373,7 +370,6 @@ All files are written to `../data/results/<drug_name>/`:
 | `*_best_pose.sdf` | Best docked ligand pose (3D coordinates) |
 | `*_best_pose.pdb` | Same pose in PDB format (for PyMOL) |
 | `*_clean.pdb` | PDBFixer-prepared receptor (missing residues added, waters removed) |
-| `*_validation.json` | 5-tier QC: per-check results, confidence score, overall status |
 | `*_web_enrichment.json` | Drug summary, protein summary, PubMed papers, web sources |
 | `*_explanation.json` | Full Gemma 4 output: 7 sections + bibliography |
 | `*_explanation.txt` | Plain text version of the explanation |
@@ -515,41 +511,6 @@ Used when a co-crystal PDB is provided alongside a different drug SMILES. The bi
 **Mode C — Apo Structure with Pocket Prediction**
 
 Used when the PDB has no drug-like HETATM records. fpocket or P2Rank identifies the top druggable pockets, which are ranked by druggability score. The top pocket is used as the docking box center by default; a pocket selection menu is shown in interactive mode.
-
----
-
-## Validation Suite
-
-The 5-tier validation returns a confidence score and per-check breakdown:
-
-```
-══════════════════════════════════════════════════════
-DockExplain — Validation Report
-  Drug    : Erlotinib
-  Protein : CYCLOOXYGENASE-2
-══════════════════════════════════════════════════════
-
-── Tier 1: Structural Integrity ──
-⚠ [1.1] RMSD (structural distortion)
-    Large RMSD (75.75 Å > 2.0 Å). PDBFixer may have introduced
-    significant structural changes.
-✓ [1.2] Backbone atom conservation — 8816 atoms preserved
-✓ [1.3] Chain identifier preservation — [A, B, C, D]
-✓ [1.4] Alternate location handling — none found
-✓ [1.5] Residue numbering continuity — no gaps
-
-── Tier 2: Chemistry Correctness ──
-✗ [2.1] Protonation states at pH 7.4 — 9 issues found
-✓ [2.2] Histidine tautomers — no HIS within 10Å
-✓ [2.4] Disulfide bond preservation — 20 bonds intact
-✓ [2.5] Chirality and planarity — 2208 residues OK
-
-── Summary ──
-PASS : 13   WARN : 3   FAIL : 3   SKIP : 1
-Confidence score : 76.3%
-Overall status   : FAIL
-══════════════════════════════════════════════════════
-```
 
 ---
 
